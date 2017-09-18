@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: Wiki API Import
- * Plugin URI:
+ * Plugin URI: netpower.no
  * Description: This plugin supports to import available data of Wikipedia into wordpress single posts/pages.
  * Version: 1.0.0
- * Author: Netpower
- * Author URI:
+ * Author: NetPower
+ * Author URI:  netpower.no
  * License: Netpower
  */
 
@@ -210,12 +210,13 @@ if (!function_exists(wiki_api_save_file)) {
 		fwrite($savefile, $contents);
 		fclose($savefile);
 
+		$img_title = preg_replace('/\.[^.]+$/', '', $name);
 		$wp_filetype = wp_check_filetype(basename($filename), null);
 
 		$attachment = array(
 			'guid'           => $uploaddir['url'] . '/' . basename($filename),
 			'post_mime_type' => $wp_filetype['type'],
-			'post_title'     => preg_replace('/\.[^.]+$/', '', basename($name)),
+			'post_title'     => $img_title ,
 			'post_content'   => '',
 			'post_status'    => 'inherit',
 		);
@@ -477,13 +478,9 @@ if (!function_exists(wiki_api_import)) {
 							$allthTag = $trTag->getElementsByTagName('th');
 							
 							$th_title = $allthTag->item(0);
-							echo '<br>line 481<br>';
-							
 							// Why need to validate == 2 ????
 							if(!$th_title){
 								$title = $allTdTag->item(0)->nodeValue;
-								var_dump($title);
-								var_dump($allTdTag->item(0));
 								$value = $allTdTag->item(1)->nodeValue;
 								$title = preg_replace( "/\r|\n/", "", $title );
         						$title = preg_replace( '/\d{4}/','$0 ', $title );
@@ -588,9 +585,12 @@ if (!function_exists(wiki_api_import)) {
 					if (count($municipalityList) > 0) {
 						update_field(FIELD_ID_MUNICIPALITY, serialize($municipalityList), $post_id);
 					}
-					if (isset($thumbnail) && $post_id && $thumbnail['source'] !== the_field(FIELD_ID_THUMBNAIL, $post_id)) {
-						update_field(FIELD_ID_THUMBNAIL, $thumbnail['source'], $post_id); // thumbnail
+				
 
+					//||  $thumbnail['source'] &&
+					if ( (isset($thumbnail) && $post_id && $thumbnail['source'] !== get_field(FIELD_ID_THUMBNAIL, $post_id) ) || ( $thumbnail['source'] && !has_post_thumbnail( $post_id ))  ) {
+
+						$filename_notconverthtf8 = $pageimage;
 						$filename = wiki_api_parse_utf8($pageimage);
 						$filename = str_replace($utf8char, $non_utf8char, $filename);
 
