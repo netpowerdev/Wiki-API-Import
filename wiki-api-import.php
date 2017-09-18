@@ -1,63 +1,64 @@
 <?php
 /**
  * Plugin Name: Wiki API Import
- * Plugin URI:
+ * Plugin URI: netpower.no
  * Description: This plugin supports to import available data of Wikipedia into wordpress single posts/pages.
  * Version: 1.0.0
- * Author: Netpower
- * Author URI:
+ * Author: NetPower
+ * Author URI:  netpower.no
  * License: Netpower
  */
-
+//header('Access-Control-Allow-Origin: *');
 /**
  * Add menu and submenu
  * @return void
  */
-// If this file is called directly, abort.
-if ( ! defined( 'WPINC' ) ) {
-	die;
-}
-
 function wiki_api_import_css() {
 	wp_enqueue_style('style-name', get_stylesheet_uri());
 	wp_enqueue_script('script-name', get_template_directory_uri() . '/js/example.js', array(), '1.0.0', true);
 }
 
-include 'icl/setting.php';
+if (WEB_SITE === 'NN') {
+	define(WIKIPEDIA_API_ENDPOINT, 'https://nn.wikipedia.org/w/api.php');
+	define(WIKIPEDIA_INFOBOX_CLASS, 'infobox');
+	define(WIKIPEDIA_TERM_CATEGORY, 'Kategori');
+	define(WIKIPEDIA_TERM_BIRTHDAY, 'Fødde i');
+	define(WIKIPEDIA_TERM_DEADDAY, 'Døde i');
+	define(WIKIPEDIA_TERM_MUNICIPALITY, 'Forfattarar frå (.*)');
+	define(WIKIPEDIA_TERM_MALE, 'Einskildmenn');
+	define(WIKIPEDIA_TERM_FEMALE, 'Einskildkvinner');
+	define(LAST_UPDATED_AUTHORS_PAGE_ID, 9450);
+} else {
+	define(WIKIPEDIA_API_ENDPOINT, 'https://no.wikipedia.org/w/api.php');
+	define(WIKIPEDIA_INFOBOX_CLASS, 'infoboks');
+	define(WIKIPEDIA_TERM_CATEGORY, 'Kategori');
+	define(WIKIPEDIA_TERM_BIRTHDAY, 'Fødsler i');
+	define(WIKIPEDIA_TERM_DEADDAY, 'Dødsfall i');
+	define(WIKIPEDIA_TERM_MUNICIPALITY, 'Personer fra (.*) kommune');
+	define(WIKIPEDIA_TERM_MALE, 'Menn');
+	define(WIKIPEDIA_TERM_FEMALE, 'Kvinner');
+	define(LAST_UPDATED_AUTHORS_PAGE_ID, 6246);
+}
 
-$wiki_api_setting = get_option('wiki_api_setting_save');
-$wiki_api_setting_customfield = get_option('wiki_api_setting_customfield');
+const LOG_FILE_PATH         = 'cron.log';
+const CRON_IMPORT_PAGE_SIZE = 5;
+const AUTHOR_CATEGORY_ID    = 7;
 
-
-define(WIKIPEDIA_API_ENDPOINT, $wiki_api_setting['api_endpoint']);
-define(WIKIPEDIA_INFOBOX_CLASS, $wiki_api_setting['infobox_class']);
-define(WIKIPEDIA_TERM_CATEGORY, $wiki_api_setting['term_category']);
-define(WIKIPEDIA_TERM_BIRTHDAY, $wiki_api_setting['term_birthday']);
-define(WIKIPEDIA_TERM_DEADDAY, $wiki_api_setting['term_deadday']);
-define(WIKIPEDIA_TERM_MUNICIPALITY, $wiki_api_setting['term_municipality']);
-define(WIKIPEDIA_TERM_MALE, $wiki_api_setting['term_male']);
-define(WIKIPEDIA_TERM_FEMALE, $wiki_api_setting['term_female']);
-define(LAST_UPDATED_AUTHORS_PAGE_ID, $wiki_api_setting['last_updated_author']);
-
-
-define(LOG_FILE_PATH, $wiki_api_setting['log_file_path']);
-define(CRON_IMPORT_PAGE_SIZE, $wiki_api_setting['import_page_size']);
-define(AUTHOR_CATEGORY_ID, $wiki_api_setting['author_category_id']);
-
-define(FIELD_ID_THUMBNAIL, $wiki_api_setting['id_thumbnail']);
-define(FIELD_ID_PAGE_ID, $wiki_api_setting['id_page_id']);
-define(FIELD_ID_INFOBOX, $wiki_api_setting['id_infobox']);
-define(FIELD_ID_SECTIONS, $wiki_api_setting['id_sections']);
-define(FIELD_ID_MUNICIPALITY, $wiki_api_setting['id_municipality']);
-define(FIELD_ID_REVID, $wiki_api_setting['id_revid']);
-define(FIELD_ID_BIRTHYEAR, $wiki_api_setting['id_birthyear']);
-define(FIELD_ID_DEATHYEAR, $wiki_api_setting['id_deathyear']);
-define(FIELD_ID_GENRE, $wiki_api_setting['id_genre']);
-define(FIELD_ID_FIRSTNAME, $wiki_api_setting['id_firstname']);
-define(FIELD_ID_LASTNAME, $wiki_api_setting['id_lastname']);
-define(FIELD_ID_BOOK_FIRSTNAME, $wiki_api_setting['id_bookfirstname']);
-define(FIELD_ID_BOOK_LASTNAME, $wiki_api_setting['id_booklastname']);
-
+const FIELD_ID_THUMBNAIL    = 'field_568b6910431b1';
+const FIELD_ID_PAGE_ID      = 'page_id';
+const FIELD_ID_INFOBOX      = 'field_568b6532598ab';
+const FIELD_ID_SECTIONS     = 'field_568b3bcf0d81a';
+const FIELD_ID_MUNICIPALITY = 'field_568b3b88327a3';
+const FIELD_ID_REVID        = 'field_569f06a4d47b3';
+const FIELD_ID_BIRTHYEAR    = 'field_568a29ce83566';
+const FIELD_ID_DEATHYEAR    = 'field_5698908f8686d';
+const FIELD_ID_GENRE        = 'field_568b3b5b327a1';
+const FIELD_ID_AUTO_UPDATE  = 'field_56c29feedd231';
+const FIELD_ID_GENDER       = 'field_56ce9a41d6344';
+const FIELD_ID_FIRSTNAME    = 'field_56dfc65f8c8ea';
+const FIELD_ID_LASTNAME     = 'field_56dfc66f8c8eb';
+const FIELD_ID_BOOK_FIRSTNAME    = 'field_5733f9e2a053a';
+const FIELD_ID_BOOK_LASTNAME     = 'field_5733f9fda053b';
 
 if (!function_exists(wiki_api_admin_default_setup)) {
 	function wiki_api_admin_default_setup() {
@@ -210,12 +211,13 @@ if (!function_exists(wiki_api_save_file)) {
 		fwrite($savefile, $contents);
 		fclose($savefile);
 
+		$img_title = preg_replace('/\.[^.]+$/', '', $name);
 		$wp_filetype = wp_check_filetype(basename($filename), null);
 
 		$attachment = array(
 			'guid'           => $uploaddir['url'] . '/' . basename($filename),
 			'post_mime_type' => $wp_filetype['type'],
-			'post_title'     => preg_replace('/\.[^.]+$/', '', basename($name)),
+			'post_title'     => $img_title ,
 			'post_content'   => '',
 			'post_status'    => 'inherit',
 		);
@@ -477,13 +479,9 @@ if (!function_exists(wiki_api_import)) {
 							$allthTag = $trTag->getElementsByTagName('th');
 							
 							$th_title = $allthTag->item(0);
-							echo '<br>line 481<br>';
-							
 							// Why need to validate == 2 ????
 							if(!$th_title){
 								$title = $allTdTag->item(0)->nodeValue;
-								var_dump($title);
-								var_dump($allTdTag->item(0));
 								$value = $allTdTag->item(1)->nodeValue;
 								$title = preg_replace( "/\r|\n/", "", $title );
         						$title = preg_replace( '/\d{4}/','$0 ', $title );
@@ -588,9 +586,12 @@ if (!function_exists(wiki_api_import)) {
 					if (count($municipalityList) > 0) {
 						update_field(FIELD_ID_MUNICIPALITY, serialize($municipalityList), $post_id);
 					}
-					if (isset($thumbnail) && $post_id && $thumbnail['source'] !== the_field(FIELD_ID_THUMBNAIL, $post_id)) {
-						update_field(FIELD_ID_THUMBNAIL, $thumbnail['source'], $post_id); // thumbnail
+				
 
+					//||  $thumbnail['source'] &&
+					if ( (isset($thumbnail) && $post_id && $thumbnail['source'] !== get_field(FIELD_ID_THUMBNAIL, $post_id) ) || ( $thumbnail['source'] && !has_post_thumbnail( $post_id ))  ) {
+
+						$filename_notconverthtf8 = $pageimage;
 						$filename = wiki_api_parse_utf8($pageimage);
 						$filename = str_replace($utf8char, $non_utf8char, $filename);
 
