@@ -6,7 +6,7 @@
  * Version: 1.0.0
  * Author: NetPower
  * Author URI:  netpower.no
- * License: Netpower
+ * License: GPL
  */
 //header('Access-Control-Allow-Origin: *');
 /**
